@@ -2,6 +2,8 @@ import numpy as np, pandas as pd, os, gc
 import matplotlib.pyplot as plt, time
 from PIL import Image 
 import warnings
+import cvs
+
 warnings.filterwarnings("ignore")
 
 from keras.models import load_model
@@ -49,7 +51,10 @@ class DataGenerator(keras.utils.Sequence):
 
 # PREDICT 1 BATCH TEST DATASET
 def launch_test(image):
-    test = pd.read_csv(path + 'sample_submission.csv')
+    with open('sample_submission.csv', 'w', newline='') as csvfile:
+        csvfile.writerow(['ImageId', 'EncodedPixels', 'ClassId'])
+        csvfile.writerow([image, '1 409600', '0'])
+    test = pd.read_csv('./sample_submission.csv')
     test_batches = DataGenerator(test.iloc[::4],subset='test',batch_size=256)
     test_preds = model.predict_generator(test_batches,steps=1,verbose=1)
     return
