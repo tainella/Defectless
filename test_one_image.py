@@ -3,11 +3,13 @@ import matplotlib.pyplot as plt, time
 from PIL import Image 
 import warnings
 import csv
+import cv2
 
 warnings.filterwarnings("ignore")
 import tensorflow
 from tensorflow import keras
 from tensorflow.keras.models import load_model
+import os
 
 
 from tensorflow.keras import backend as K
@@ -78,6 +80,7 @@ def dice_coef(y_true, y_pred, smooth=1):
     intersection = K.sum(y_true_f * y_pred_f)
     return (2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth)
 
+
 class DataGenerator(tensorflow.keras.utils.Sequence):
     def __init__(self, df, batch_size = 16, subset="train", shuffle=False, preprocess=None, info={}):
         super().__init__()
@@ -123,9 +126,13 @@ def launch_test(image):
         #csvfile.write('ImageId, EncodedPixels, ClassId\n')
         #csvfile.write("{}, 1 409600, 0".format(image))
     test = pd.read_csv('sample_submission.csv')
-    test_batches = DataGenerator(test.iloc[::4],subset='test',batch_size=32)
-    print(model)
-    test_preds = model.predict_generator(test_batches,steps=1,verbose=1)
+    
+
+    #test_dataloader = Dataloder(test_dataset, batch_size=1, shuffle=False)
+    
+    #test_batches = DataGenerator(test.iloc[::4],subset='test',batch_size=32)
+    test_preds = model.evaluate_generator(test_dataloader)
+    #predict_generator(test_batches,steps=1,verbose=1)
     return test_preds
 
 #!/usr/bin/python
@@ -133,31 +140,19 @@ import sys
 if __name__ == "__main__":
     if len (sys.argv) > 1:
         test_image = sys.argv[1]
-        pred = launch_test(test_image)
-        for i,batch in enumerate(pred):
-            plt.figure(figsize=(14,50)) #20,18
-            for k in range(16):
-                plt.subplot(16,1,k+1)
-                img = batch[0][k,]
-                img = Image.fromarray(img.astype('uint8'))
-                img = np.array(img)
-                extra = '  has defect'
-                for j in range(4):
-                    print(batch.shape)
-                    msk = batch[1][k,:,:,j]
-                    msk = mask2pad(msk,pad=3)
-                    msk = mask2contour(msk,width=2)
-                    if np.sum(msk)!=0: extra += ' '+str(j+1)
-                    if j==0: # yellow
-                        img[msk==1,0] = 235
-                        img[msk==1,1] = 235
-                    elif j==1: img[msk==1,1] = 210 # green
-                    elif j==2: img[msk==1,2] = 255 # blue
-                    elif j==3: # magenta
-                        img[msk==1,0] = 255
-                        img[msk==1,2] = 255
-                plt.title(filenames[16*i+k]+extra)
-                plt.axis('off')
-            plt.imshow(img)
-            plt.subplots_adjust(wspace=0.05)
-            plt.show()
+        model = load_model('UNET.h5',custom_objects={'dice_coef':dice_coef})
+
+        # PREDICT 1 BATCH TEST DATASET
+        test = pd.read_csv('sample_submission.csv')
+        # test['ImageId'] = test['ImageId_ClassId'].map(lambda x: x.split('_')[0])
+        test_batches = DataGenerator(test[:1],subset='test',batch_size=1)
+        test_preds = model.predict_generator(test_batches,steps=1,verbose=1)
+
+        X = np.empty((1,128,800,3),dtype=np.float32)
+        X[0,] = Image.open('test_images/' + sys.argv[1]).resize((800,128))
+        y_pred = model.predict(X)
+
+        msk = test_preds[0][:, :, 0]
+        
+        plt.imshow(msk)
+        plt.show()
